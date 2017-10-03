@@ -36,8 +36,11 @@ table(is.na(acc2014$TWAY_ID2))
 dim(acc2014)
 dim(acc2015)
 ## setdiff(colnames(acc2015), colnames(acc2014))
+## setdiff(colnames(acc2014), colnames(acc2015))
 
 colnames(notcol <- acc2015[!(colnames(acc2015) %in% colnames(acc2014))])
+colnames(notcol2 <- acc2014[!(colnames(acc2014) %in% colnames(acc2015))])
+
 '''
 Comment:
 Three columns that are missing:
@@ -60,7 +63,20 @@ Comment:
     acc2014.
 '''
 
+# Merging fips dataset
+fips <- read_csv('fips.csv')
 
+# Transforming int to char 
+acc$STATE <- as.character(acc$STATE)
+acc$COUNTY <- as.character(acc$COUNTY)
+
+# Adding zeros to State and County Codes
+acc$COUNTY <- str_pad(acc$COUNTY, 3, side = 'left', pad = '0')
+acc$STATE <- str_pad(acc$STATE, 2, side = 'left', pad = '0')
+
+# Renaming variables and merging Accident and FIPS dataset
+acc <- rename(acc, c('STATE' = 'StateFIPSCode', 'COUNTY' = 'CountyFIPSCode'))
+acc <- left_join(acc, fips, by = c("StateFIPSCode", "CountyFIPSCode"))
 
 
 
