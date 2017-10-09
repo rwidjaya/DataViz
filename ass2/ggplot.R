@@ -44,11 +44,17 @@ h1_bubble <- ggplot(d, aes(x, y)) +
   geom_text(data = p, aes(x, y, label = com$SHORTHAND), size = 3) +
   scale_fill_continuous(low = "red", high = "green", guide = "colorbar") +
   guides(fill=guide_legend(title="Median Wage")) +
-  labs(title = "Top 10 Certified H1-B Sponsors & Median Wage 2016") + 
+  labs(title = "Top 10 Certified H1-B Sponsors & Median Wage 2016", 
+       subtitle = "Biggest sponsors gives relatively low wage.",
+       caption = "Source: Kaggle H1-B Data") + 
   theme_void() +
-  theme(plot.title = element_text(family = 'Helvetica', hjust = 0.5, vjust = -0.5, face = "bold", size = 15)) +
+  theme(plot.title = element_text(family = 'Helvetica', hjust = 0.5, vjust = -0.5, face = "bold", size = 15),
+        plot.subtitle = element_text(family = 'Helvetica', hjust = 0.5, vjust = -0.5, size = 13),
+        plot.caption = element_text(family = 'Helvetica', hjust = 0.5, vjust = 0.5, face = "italic", size = 9))
   coord_fixed(1)
 
+### TO THE CHART
+h1_bubble
 
 
 # Map Chart
@@ -83,11 +89,16 @@ us_state_h1b_wage <- us_state +
   geom_polygon(data = ushb, aes(fill = ushb$MEDIAN_PWAGE)) +
   geom_polygon(color = "black", fill = NA) +
   scale_fill_continuous(high = "green", low = "grey", guide="colorbar")  +
-  labs(title = "Certified H1-B Application Median Wage per State 2016") + 
+  labs(title = "Certified H1-B Application Median Wage per State 2016",
+       subtitle = "The coasts generally have higher median income.",
+       caption = "Source: Kaggle H1-B Data") + 
   geom_text(data = cnames, aes(long, lat, group = NULL, label = cnames$MEDIAN_PWAGE), size = 2) +
   guides(fill=FALSE) +
-  theme(plot.title = element_text(family = 'Helvetica', hjust = 0.5, vjust = -0.5, face = "bold", size = 15))
-  
+  theme(plot.title = element_text(family = 'Helvetica', hjust = 0.5, vjust = -0.5, face = "bold", size = 15),
+plot.subtitle = element_text(family = 'Helvetica', hjust = 0.5, vjust = -0.5, size = 13),
+plot.caption = element_text(family = 'Helvetica', hjust = 0.5, vjust = 0.5, face = "italic", size = 9))
+
+
 ### TO THE CHART
 us_state_h1b_wage
 
@@ -104,7 +115,11 @@ ggplot() +
   geom_line(data = h1_med_tot, aes(x = YEAR, y = TOTAL, color = prwage_cat), alpha = 0.7) +
   xlab('YEAR') +
   ylab('Number of Certified Applicants') +
-  labs(title = "H1B Certified Applicants per Wage Class",colour = "Applicant Wage Class") 
+  labs(title = "H1B Certified Applicants per Wage Class",
+       colour = "Applicant Wage Class",
+       subtitle = "Intake from higher income bracket are steadily increasing, 
+                    while lower income application stays the same",
+       caption = "Source: Kaggle H1-B Data") 
 
 
 
