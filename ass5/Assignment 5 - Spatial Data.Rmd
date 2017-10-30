@@ -1,0 +1,207 @@
+---
+title: "Assignment 5 - Spatial Data Exploration"
+output:
+  html_document: default
+  pdf_document: default
+---
+###### UCID  : 12149052 
+###### Name  : Regina Widjaya
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r echo=FALSE, message= FALSE, warning=FALSE}
+library(sp) ## spatial data in R
+library(sf)
+library(rgdal) ## r bindings to geospatial data abstraction library
+library(maptools)
+library(broom)
+library(dplyr)
+library(ggplot2)
+library(ggmap)
+library(tidyverse)
+library(reshape2)
+library(viridis)
+library(raster)
+library(plotly)
+```
+
+### CLOROPLETH MAP 1
+```{r echo=FALSE, message= FALSE, warning=FALSE}
+
+getmode <- function(v) {
+  uniqv <- unique(v)
+  uniqv[which.max(tabulate(match(v, uniqv)))]
+}
+
+# Read the shapefiles into R
+states <- readOGR(dsn ="ne_50m_admin_1_states_provinces_lakes",
+                  layer = "ne_50m_admin_1_states_provinces_lakes")
+
+## SpatialPolygonsDataFrame
+class(states)
+
+## Return CRS information from spatial data object:
+proj4string(states)
+
+
+# Let's transform them into tidy data that ggplot can use
+states.points <- tidy(states, region = "adm1_code")
+
+# And join in the original variables from the shapefile
+states.df <- left_join(states.points, states@data, by = c("id" = "adm1_code"))
+
+# Using those variables, we'll filter so we just have US states
+states.df <- filter(states.df, iso_a2 == "US")
+
+## Cleaning Data
+hb_kag <- read_csv('h1b_kaggle.csv')
+HB_cert <- hb_kag %>%
+  filter(CASE_STATUS == "CERTIFIED")
+HB_cert$prwage_cat <- cut(HB_cert$PREVAILING_WAGE, c(0, 25000, 50000, 100000, 1000000000), 
+                          labels=c('low', 'middle', 'middle-high', 'high'))
+hb16 <- subset(HB_cert, YEAR == "2016")
+hb16$region <- (stringr::str_split_fixed(hb16$WORKSITE, ", ", 2))[, 2]
+hb16$region <- tolower(hb16$region)
+
+# Cleaning State Employment Data
+tot_emp <- read_csv('tot_emp.csv')
+tot_emp <- tot_emp[!(tot_emp$state == 'Puerto Rico'| tot_emp$state == 'Guam' | tot_emp$state == 'Virgin Islands'), ]
+tot_emp <- plyr::rename(tot_emp, c('state' = 'name'))
+
+# Cleaning State Computational & Mathematics Employment Data
+cm_oes <- read_csv('OES_Report.csv')
+cm_oes$state <- (stringr::str_split_fixed(cm_oes$`Area Name`, "\\(", 2))[, 1]
+cm_oes <- cm_oes[!(cm_oes$state == 'Puerto Rico'| cm_oes$state == 'Guam' | cm_oes$state == 'Virgin Islands'), ]
+cm_oes <- plyr::rename(cm_oes, c('state' = 'name'))
+
+# Final Data Manipulations
+h1b_state <- hb16 %>%
+  group_by(region) %>%
+  summarise(median_wage = median(PREVAILING_WAGE), total_h1b = n(), pop_company = getmode(EMPLOYER_NAME))
+
+h1b_state <- h1b_state[!(h1b_state$region == 'na'| h1b_state$region == 'puerto rico'), ] %>%
+  plyr::rename(c('region' = 'name'))
+
+h1b_state$name <- tools::toTitleCase(h1b_state$name)
+h1b_state <- left_join(h1b_state, tot_emp, by = c('name', 'name')) 
+h1b_state <- h1b_state %>% 
+  mutate(h1b_1000 = round(((total_h1b/TOT_EMP)*1000), 1), wage_diff = (median_wage - MED_WAGE))
+h1b_state <- mutate(h1b_state, perc_diff = wage_diff/MED_WAGE)
+h1b_state <- arrange(h1b_state, h1b_state$wage_diff)
+
+h1b_state <- left_join(states.df, h1b_state, by = 'name')
+h1b_state <- left_join(h1b_state, cm_oes, by = 'name')
+h1b_state <- mutate(h1b_state, perc_diff_CM = ((median_wage - h1b_state$'Annual median wage(2)')/h1b_state$'Annual median wage(2)'))
+
+
+```
+
+```{r message= FALSE, warning=FALSE}
+m <- ggplot(h1b_state, aes(long, lat, group=group, fill= perc_diff)) + 
+  #geom_text(aes(long, lat, group = NULL, label = h1b_state$h1b_1000), size = 2) +
+  geom_polygon() +
+  #geom_text(aes(long, lat, label = scales::percent(h1b_state$perc_diff)), color = "white") +
+  coord_map("albers", lat0 = 29.5, lat1 = 45.5,
+            xlim = c(-124.85, -66.88), ylim = c(24.4, 49.38),
+            orientation = c(90, 0, -98.35)) +
+  labs(title="H1-B median wage is being paid MUCH MORE than host state median wage...", 
+       subtitle="Percent Difference in Median Wage (Local State vs. H1-B)", 
+       caption="Source: USCIS", 
+       y="Latitude",
+       x= "Longitude") +
+  guides(fill=guide_legend(title="--% Higher")) +
+  scale_fill_viridis("perc_diff", labels= scales::percent, direction = -1) +
+  geom_path(color="white") + 
+  theme(legend.position = "bottom",
+        axis.title.x= element_text(family = 'Courier New', face = 'bold', size = 10),
+        axis.text.x = element_text(angle = 0, hjust = 1, family = 'Andale Mono', size = 8),
+        axis.title.y = element_text(family = 'Courier New', face = 'bold', size = 10),
+        axis.text.y = element_text(angle = 0, hjust = 1, family = 'Andale Mono', size = 8),
+        panel.background=element_rect(fill="#f7f7f7"),
+        plot.background=element_rect(fill="#f7f7f7"),
+        strip.background = element_rect(fill="#f7f7f7"),
+        legend.background = element_rect(fill="#f7f7f7"),
+        plot.title = element_text(family = 'Courier New', hjust = 0, face = "bold", size = 15),
+        plot.subtitle = element_text(family = 'Courier New', face = "italic", size = 10),
+        plot.caption = element_text(family = 'Courier New', face = "italic", size = 9),
+        panel.grid.major.x=element_line(color="gray100"),
+        panel.grid.minor.x=element_line(color="gray90")
+        ) 
+
+plot(m)
+```
+
+### CLOROPLETH MAP 2
+
+```{r message= FALSE, warning=FALSE}
+m2 <- ggplot(h1b_state, aes(long, lat, group=group, fill= perc_diff_CM)) + 
+  #geom_text(aes(long, lat, group = NULL, label = h1b_state$h1b_1000), size = 2) +
+  geom_polygon() +
+  #geom_text(aes(long, lat, label = scales::percent(h1b_state$perc_diff)), color = "white") +
+  coord_map("albers", lat0 = 29.5, lat1 = 45.5,
+            xlim = c(-124.85, -66.88), ylim = c(24.4, 49.38),
+            orientation = c(90, 0, -98.35)) +
+  labs(title="However, H1-B wage are still less than \nmedian Computer & Mathematics wage...", 
+       subtitle="Percent Difference in Median Wage (Local State vs. H1-B)", 
+       caption="Source: USCIS", 
+       y="Latitude",
+       x= "Longitude") +
+  guides(fill=guide_legend(title="--% Higher")) +
+  scale_fill_viridis("perc_diff", option = "magma", labels= scales::percent) +
+  geom_path(color="white") + 
+  theme(legend.position = "bottom",
+        axis.title.x= element_text(family = 'Courier New', face = 'bold', size = 10),
+        axis.text.x = element_text(angle = 0, hjust = 1, family = 'Andale Mono', size = 8),
+        axis.title.y = element_text(family = 'Courier New', face = 'bold', size = 10),
+        axis.text.y = element_text(angle = 0, hjust = 1, family = 'Andale Mono', size = 8),
+        panel.background=element_rect(fill="#f7f7f7"),
+        plot.background=element_rect(fill="#f7f7f7"),
+        strip.background = element_rect(fill="#f7f7f7"),
+        legend.background = element_rect(fill="#f7f7f7"),
+        plot.title = element_text(family = 'Courier New', hjust = 0, face = "bold", size = 15),
+        plot.subtitle = element_text(family = 'Courier New', face = "italic", size = 10),
+        plot.caption = element_text(family = 'Courier New', face = "italic", size = 9),
+        panel.grid.major.x=element_line(color="gray100"),
+        panel.grid.minor.x=element_line(color="gray90")
+  ) 
+
+plot(m2)
+```
+
+### INTERACTIVE MAP (PLOTLY)
+
+```{r message= FALSE, warning=FALSE}
+intr_df <- h1b_state[,c("name","total_h1b","median_wage","h1b_1000","perc_diff","perc_diff_CM", "pop_company", "postal")]
+intr_df <-unique(intr_df)
+intr_df$perc_diff <- scales::percent(intr_df$perc_diff)
+intr_df$perc_diff_CM <- scales::percent(intr_df$perc_diff_CM)
+
+
+intr_df$hover <- with(intr_df, paste(name, '<br>', 
+                          "# of Approved H1-B", total_h1b, '<br>', 
+                          "Median Wage", median_wage, "<br>",
+                          "*", perc_diff,"Above State Median Wage","<br>",
+                          "*", perc_diff_CM,"Above State C&M Wage","<br>",
+                          "Biggest Sponsor:", pop_company))
+
+# give state boundaries a white border
+l <- list(color = toRGB("white"), width = 2)
+# specify some map projection/options
+g <- list(
+  scope = 'usa',
+  projection = list(type = 'albers usa'),
+  showlakes = TRUE,
+  lakecolor = toRGB('white')
+)
+
+pl <- plot_ly(intr_df, z = intr_df$total_h1b, text = intr_df$hover, locations = intr_df$postal, type = 'choropleth',
+        locationmode = 'USA-states', color = intr_df$total_h1b, colors = 'Purples',
+        marker = list(line = l), colorbar = list(title = "# of Approved H1-B Application")) %>%
+  layout(title = '2016 H1-B Approved Application Summary<br>(Hover for breakdown | Source: USCIS)',
+         caption = 'Source: USCIS' , geo = g)
+
+pl
+
+```
